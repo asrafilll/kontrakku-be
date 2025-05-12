@@ -11,7 +11,6 @@ CONTRACT_PROCESSING_STATUS = (
     (CONTRACT_DONE, "Done"),
 )
 
-
 class Contract(BaseModel):
     file_name = models.CharField(max_length=255)
     file_path = models.FileField(upload_to="documents/")
