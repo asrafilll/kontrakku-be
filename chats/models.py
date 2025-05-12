@@ -1,3 +1,15 @@
 from django.db import models
+from core.models import BaseModel
 
-# Create your models here.
+CHAT_ROLE_USER = "user"
+CHAT_ROLE_ASSISTANT = "assistant"
+
+CHAT_ROLE_CHOICES = (
+    (CHAT_ROLE_USER, "User"),
+    (CHAT_ROLE_ASSISTANT, "Assistant"),
+)
+
+class Chat(BaseModel):
+    message = models.TextField()
+    role = models.CharField(max_length=50, choices=CHAT_ROLE_CHOICES, default=CHAT_ROLE_USER)
+    contract = models.ForeignKey("documents.Contract", on_delete=models.SET_NULL, null=True)

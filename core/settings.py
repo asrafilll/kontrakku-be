@@ -1,6 +1,6 @@
 from pathlib import Path
-
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
 
@@ -48,7 +48,7 @@ ROOT_URLCONF = "core.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "template"],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -68,8 +68,12 @@ WSGI_APPLICATION = "core.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("PG_NAME", "kontrakku"),
+        "USER": os.environ.get("PG_USER", "kontrakku"),
+        "PASSWORD": os.environ.get("PG_PASSWORD", "kontrakku"),
+        "HOST": os.environ.get("PG_HOST", "localhost"),
+        "PORT": os.environ.get("PG_PORT", "5432"),
     }
 }
 
