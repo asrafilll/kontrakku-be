@@ -42,12 +42,12 @@ def process_contract(contract: Contract):
     )
     pm.add_message("user", f"contract: {content}")
 
-    res = pm.generate()
+    summarized_content = pm.generate()
 
-    # 3. Store contract text and summary
+    # 3. Store contract text and summary to table contract
     print(f"{file_name} - Storing contract and summary into database")
     contract.raw_text = content
-    contract.summarized_text = res
+    contract.summarized_text = summarized_content
     contract.status = CONTRACT_DONE
     contract.save()
 
