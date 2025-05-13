@@ -1,3 +1,16 @@
 .env
 .venv
 .chromadb_data
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+**/migrations/*.pyc
+**/migrations/__pycache__/
+
+/media/*
+!/media/.gitkeep
+
+.DS_Store
+*.log
