@@ -9,5 +9,8 @@ __pycache__/
 **/migrations/*.pyc
 **/migrations/__pycache__/
 
+/media/*
+!/media/.gitkeep
+
 .DS_Store
 *.log
