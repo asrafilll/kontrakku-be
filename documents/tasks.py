@@ -7,11 +7,14 @@ from documents.models import CONTRACT_DONE, Contract
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain_openai.embeddings import OpenAIEmbeddings
 
+
 @task()
-def process_contract(contract: Contract):
+def process_contract(contract_id):
+    contract = Contract.objects.get(id=contract_id)
     file_name = contract.file_path.name
 
-    #1. Using Mistral AI to process the pdf document into an MD
+    # 1. Using Mistral AI to process the pdf document into an MD
+    print(f"{file_name} - Starting OCR processing")
     uploaded_pdf = mistral.files.upload(
         file={
             "file_name": file_name,
@@ -20,6 +23,7 @@ def process_contract(contract: Contract):
         purpose="ocr",
     )
     signed_url = mistral.files.get_signed_url(file_id=uploaded_pdf.id)
+    print(f"{file_name} - Got signed URL: {signed_url.url}")
 
     print(f"{file_name} - Processing contract")
     ocr_response = mistral.ocr.process(
@@ -32,17 +36,40 @@ def process_contract(contract: Contract):
     for page in ocr_response.dict().get("pages", []):
         content += page["markdown"]
 
+        # Print a preview of the extracted content
+    print(f"{file_name} - OCR Result Preview: {content[:200]}...")
+    print(f"{file_name} - Total content length: {len(content)} characters")
 
     # 2. Summarize the contract
     print(f"{file_name} - Summarizing contract")
     pm = PromptManager()
     pm.add_message(
         "system",
-        "Summarize the following contract. And get the bullets point of the content, Only the summarization part is required. DO NOT ADD ANY EXTRA TEXT.",
+        """
+        You are a contract summarization assistant.  Your job is:
+
+        <thinking>
+        0. Look at the raw contract text and decide whether it is written in English or in Bahasa Indonesia.  
+           — If it’s English, set CONTRACT_LANGUAGE = "English".  
+           — If it’s Bahasa Indonesia, set CONTRACT_LANGUAGE = "Bahasa Indonesia".  
+        1. Carefully review the contract document in that detected language.  
+        2. Identify the main purpose, parties involved, and key terms and conditions.  
+        3. Determine the appropriate level of detail based on {$SUMMARY_DETAIL_LEVEL}.  
+        4. Organize your summary into clear bullet points.  
+        5. Make sure your output is in the same language you detected—no switching!  
+        </thinking>
+
+        <result>       
+        CONTRACT_LANGUAGE: {the language you detected}  
+        • [First bullet in that language]  
+        • [Second bullet…]  
+        </result>
+        """
     )
     pm.add_message("user", f"contract: {content}")
 
     summarized_content = pm.generate()
+    print(f"{file_name} - Summary Result: {summarized_content}")
 
     # 3. Store contract text and summary to table contract
     print(f"{file_name} - Storing contract and summary into database")
@@ -50,19 +77,42 @@ def process_contract(contract: Contract):
     contract.summarized_text = summarized_content
     contract.status = CONTRACT_DONE
     contract.save()
+    print(f"{file_name} - Contract saved with status: {contract.status}")
 
     # 4. Semantic chunking and embedding
     print(f"{file_name} - Semantic chunking and embedding")
     splitter = SemanticChunker(OpenAIEmbeddings())
     documents = splitter.create_documents([content])
+    print(f"{file_name} - Created {len(documents)} semantic chunks")
 
-    # 5. Store in ChromaDB
+    # Print a sample of the first chunk
+    if documents:
+        print(f"{file_name} - First chunk preview: {documents[0].model_dump().get('page_content')[:100]}...")
+
+        # 5. Store in ChromaDB
     print(f"{file_name} - Store chunks and embeddings in chroma db")
     collection = chroma.create_collection(name=contract.id, embedding_function=openai_ef)
 
+    chunk_docs = [doc.model_dump().get("page_content") for doc in documents]
+    chunk_ids = [str(i) for i in range(len(documents))]
+
     collection.add(
-        documents=[doc.model_dump().get("page_content") for doc in documents],
-        ids=[str(i) for i in range(len(documents))]
+        documents=chunk_docs,
+        ids=chunk_ids
     )
+    print(f"{file_name} - Added {len(chunk_docs)} chunks to ChromaDB collection: {contract.id}")
 
     print(f"{file_name} - Contract processing done")
+
+    # Return a summary of the processing
+    result_summary = {
+        "contract_id": contract.id,
+        "file_name": file_name,
+        "content_length": len(content),
+        "summary_length": len(summarized_content),
+        "chunks_created": len(documents),
+        "status": contract.status
+    }
+    print(f"{file_name} - Processing summary: {result_summary}")
+
+    return result_summary
