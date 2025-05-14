@@ -1,15 +1,16 @@
+from langchain_experimental.text_splitter import SemanticChunker
+from langchain_openai.embeddings import OpenAIEmbeddings
+
 from core.ai.chroma import chroma, openai_ef
 from core.ai.mistral import mistral
 from core.ai.prompt_manager import PromptManager
 from documents.models import CONTRACT_DONE, Contract
-from langchain_experimental.text_splitter import SemanticChunker
-from langchain_openai.embeddings import OpenAIEmbeddings
+
 
 def get_chroma_data(contract_id, n_initial_words=10):
     try:
         collection = chroma.get_collection(
-            name=contract_id,
-            embedding_function=openai_ef
+            name=contract_id, embedding_function=openai_ef
         )
 
         all_chunks = collection.get(include=["documents"])["documents"]
@@ -28,6 +29,7 @@ def get_chroma_data(contract_id, n_initial_words=10):
     except Exception as e:
         print(f"Error inspecting chunks: {e}")
         return 0, []
+
 
 def process_contract(contract_id):
     contract = Contract.objects.get(id=contract_id)
@@ -84,7 +86,7 @@ def process_contract(contract_id):
         • [First bullet in that language]  
         • [Second bullet…]  
         </result>
-        """
+        """,
     )
     pm.add_message("user", f"contract: {content}")
 
@@ -107,20 +109,23 @@ def process_contract(contract_id):
 
     # Print a sample of the first chunk
     if documents:
-        print(f"{file_name} - First chunk preview: {documents[0].model_dump().get('page_content')[:100]}...")
+        print(
+            f"{file_name} - First chunk preview: {documents[0].model_dump().get('page_content')[:100]}..."
+        )
 
         # 5. Store in ChromaDB
     print(f"{file_name} - Store chunks and embeddings in chroma db")
-    collection = chroma.create_collection(name=contract.id, embedding_function=openai_ef)
+    collection = chroma.create_collection(
+        name=contract.id, embedding_function=openai_ef
+    )
 
     chunk_docs = [doc.model_dump().get("page_content") for doc in documents]
     chunk_ids = [str(i) for i in range(len(documents))]
 
-    collection.add(
-        documents=chunk_docs,
-        ids=chunk_ids
+    collection.add(documents=chunk_docs, ids=chunk_ids)
+    print(
+        f"{file_name} - Added {len(chunk_docs)} chunks to ChromaDB collection: {contract.id}"
     )
-    print(f"{file_name} - Added {len(chunk_docs)} chunks to ChromaDB collection: {contract.id}")
 
     print(f"{file_name} - Contract processing done")
 
@@ -131,7 +136,7 @@ def process_contract(contract_id):
         "content_length": len(content),
         "summary_length": len(summarized_content),
         "chunks_created": len(documents),
-        "status": contract.status
+        "status": contract.status,
     }
     print(f"{file_name} - Processing summary: {result_summary}")
 
