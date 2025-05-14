@@ -24,12 +24,14 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "channels",
     "documents",
     "chats",
     "huey.contrib.djhuey",
@@ -63,6 +65,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "core.wsgi.application"
+ASGI_APPLICATION = "core.asgi.application"
 
 
 # Database
@@ -76,6 +79,15 @@ DATABASES = {
         "PASSWORD": os.environ.get("PG_PASSWORD", "kontrakku"),
         "HOST": os.environ.get("PG_HOST", "localhost"),
         "PORT": os.environ.get("PG_PORT", "5432"),
+    }
+}
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],  # redis default port
+        },
     }
 }
 

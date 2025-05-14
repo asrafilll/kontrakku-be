@@ -18,6 +18,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
+from .consumer import ChatConsumer, NotificationConsumer
+
 urlpatterns = [
     path("admin/", admin.site.urls),
+]
+
+websocket_urlpatterns = [
+    path("ws/notifications/", NotificationConsumer.as_asgi()),
+    path("ws/chat/<str:document_id>/", ChatConsumer.as_asgi()),
 ]
