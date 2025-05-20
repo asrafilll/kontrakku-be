@@ -28,8 +28,7 @@ class DocumentUploadAPI(View):
         return JsonResponse({
             'success': True,
             'contract_id': str(contract.id),
-            'status': contract.status,
-            'message': 'Document uploaded and processing started'
+            'status': contract.status
         })
 
 
