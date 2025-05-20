@@ -1,6 +1,7 @@
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
+
 def send_notification(notification_type, content):
     channel = get_channel_layer()
     async_to_sync(channel.group_send)(
@@ -20,5 +21,5 @@ def send_chat_message(message, contract_id):
             "type": "send_message",
             "message": message,
             "sender": "assistant",
-        }
+        },
     )
