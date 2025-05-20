@@ -6,10 +6,12 @@ from core.ai.prompt_manager import PromptManager
 from documents.models import Contract
 
 
-
 def process_chat(message, contract_id):
+    default_selected_username = "admin"
+    user = User.objects.get(username=default_selected_username)
+
     contract = Contract.objects.get(id=contract_id)
-    user = User.objects.get(username='admin')
+
     # Insert chat data to database
     Chat.objects.create(message=message, role="user", contract=contract, user=user)
 
@@ -47,6 +49,6 @@ def process_chat(message, contract_id):
     res = p.generate()
 
     # insert the new assistant's answer to database
-    Chat.objects.create(message=res,role="assistant",contract=contract, user=user)
+    Chat.objects.create(message=res, role="assistant", contract=contract, user=user)
 
     return res

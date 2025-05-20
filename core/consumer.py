@@ -4,6 +4,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 
 from chats.tasks import process_chat_task
 
+
 class NotificationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         await self.accept()
