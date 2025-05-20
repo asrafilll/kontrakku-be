@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <header class="mb-8">
+        <h1 class="text-3xl font-bold text-center">Upload New Contract</h1>
+    </header>
+
+    {% if error %}
+        <div class="mb-4 text-center text-red-500">
+            {{ error }}
+        </div>
+    {% endif %}
+
+    <div class="bg-white shadow-md rounded-lg p-6 max-w-md mx-auto">
+        <form method="post" enctype="multipart/form-data" class="space-y-4">
+            {% csrf_token %}
+
+            <!-- File Upload Field -->
+            <div>
+                <label for="file_path" class="block text-sm font-medium text-gray-700 mb-1">
+                    Contract File
+                </label>
+                <input
+                    type="file"
+                    name="file_path"
+                    id="file_path"
+                    required
+                    class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer"
+                />
+                <p class="text-xs text-gray-500 mt-1">Upload PDF, DOC, DOCX, or other document formats</p>
+            </div>
+
+            <div class="pt-4 text-right">
+                <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded">
+                    Upload Contract
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+
+<script>
+    const ws = new WebSocket("ws://localhost:8000/ws/notifications/");
+
+    ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+
+    const type = data.message.type;
+    const content = data.message.content;
+
+    if (type === "notification") {
+      const notifContainer = document.getElementById("notifications");
+      notifContainer.innerHTML = content;
+    }
+
+   };
+ 
+   ws.onopen = () => {
+    console.log("Connected");
+   };
+
+   ws.onclose = () => {
+    console.log("Disconnected");
+   };
+</script>
+{% endblock %}
