@@ -2,6 +2,7 @@ import json
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 
+from chats.tasks import process_chat_task
 
 class NotificationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -30,9 +31,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data):
         text_data_json = json.loads(text_data)
         message = text_data_json.get("message")
+        print(message)
 
         # Chat method in progress
-        # process_chat(message, self.contract_id)
+        process_chat_task(message, self.contract_id)
 
     async def send_message(self, event):
         message = event["message"]
