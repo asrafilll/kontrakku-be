@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-4">
+    <!-- Header -->
+    <header class="mb-4">
+        <h1 class="text-2xl font-bold">Chat: {{ contract.file_name }}</h1>
+        <p class="text-sm text-gray-500">
+            Uploaded on {{ contract.created_at|date:"F d, Y" }} at {{ contract.created_at|time:"H:i" }}
+        </p>
+    </header>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Contract Preview -->
+        <div class="block col-span-1">
+            <div class="bg-white shadow-md rounded-lg p-4 h-full">
+                <h2 class="font-medium mb-3">Contract Document</h2>
+                <div class="border rounded-md p-2 h-64 flex items-center justify-center bg-gray-50">
+                    <div class="text-center">
+                        <svg class="h-12 w-12 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <p class="mt-2 text-sm">{{ contract.file_path.name|slice:"9:" }}</p>
+                        <a href="{{ contract.file_path.url }}" target="_blank"
+                           class="text-blue-500 hover:text-blue-700 text-sm mt-2 inline-block">
+                            Open Document
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Interface -->
+        <div class="col-span-1 md:col-span-2">
+            <div class="bg-white shadow-md rounded-lg p-4 h-full flex flex-col">
+                <h2 class="font-medium mb-3">Chat</h2>
+
+                <!-- Messages Container -->
+                <div id="chat-messages" class="flex-1 overflow-y-auto mb-4 space-y-4 h-96 border rounded p-4 bg-gray-50">
+                    {% for message in messages %}
+                        <div class="flex {% if message.role == 'user' %}justify-end{% else %}justify-start{% endif %}">
+                            <div class="{% if message.role == 'user' %}bg-blue-100 text-blue-800{% else %}bg-gray-100 text-gray-800{% endif %} rounded-lg px-4 py-2 max-w-3/4 break-words">
+                                <p>{{ message.message }}</p>
+                                <p class="text-xs text-gray-500 mt-1">{{ message.created_at|time:"H:i" }}</p>
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="text-center text-gray-500 py-8">
+                            <p>No messages yet. Start the conversation!</p>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Message Input -->
+                <form id="chat-form" class="border-t pt-4" onsubmit="return false;">
+                    {% csrf_token %}
+                    <div class="flex">
+                        <input
+                            type="text"
+                            id="chat-message-input"
+                            name="message"
+                            placeholder="Type your message..."
+                            class="flex-1 border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            autocomplete="off"
+                            required
+                        />
+                        <button
+                            type="submit"
+                            id="chat-message-submit"
+                            class="ml-3 bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded"
+                        >
+                            Send
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    const ws = new WebSocket("ws://localhost:8000/ws/chat/{{ contract.id }}/");
+
+    const input = document.getElementById("chat-message-input");
+    const form = document.getElementById("chat-form");
+    const messages = document.getElementById("chat-messages");
+
+    const appendMessage = (text, role = "assistant") => {
+        const wrapper = document.createElement("div");
+        wrapper.classList.add("flex", role === "user" ? "justify-end" : "justify-start");
+
+        const bubble = document.createElement("div");
+        bubble.classList.add("rounded-lg", "px-4", "py-2", "max-w-3/4", "break-words");
+        bubble.classList.add(role === "user" ? "bg-blue-100" : "bg-gray-100");
+        bubble.classList.add(role === "user" ? "text-blue-800" : "text-gray-800");
+
+        bubble.textContent = text;
+        wrapper.appendChild(bubble);
+        messages.appendChild(wrapper);
+        messages.scrollTop = messages.scrollHeight;
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.message && data.sender === "assistant") {
+            appendMessage(data.message, "assistant");
+        }
+    };
+
+    ws.onopen = () => {
+        console.log("connected");
+    };
+
+    ws.onclose = () => {
+        console.warn("disconnected");
+    };
+
+    ws.onerror = (e) => {
+        console.error("error", e);
+    };
+
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const text = input.value.trim();
+        if (!text) return;
+
+        appendMessage(text, "user");
+        ws.send(JSON.stringify({ message: text }));
+        input.value = "";
+        input.focus();
+    });
+</script>
+{% endblock %}
