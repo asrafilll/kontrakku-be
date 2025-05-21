@@ -35,10 +35,12 @@ INSTALLED_APPS = [
     "documents",
     "chats",
     "huey.contrib.djhuey",
+    "corsheaders",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -108,6 +110,16 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# CORS settings
+CORS_ALLOW_ALL_ORIGINS = True  # For development only
+# For production:
+# CORS_ALLOWED_ORIGINS = [
+#     "http://127.0.0.1:5500",
+#     "http://localhost:3000",
+# ]
+
+# Allow credentials (cookies, authorization headers)
+CORS_ALLOW_CREDENTIALS = True
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
