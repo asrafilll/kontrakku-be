@@ -1,8 +1,10 @@
-from django.views import View
-from django.shortcuts import render, redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.views import View
+
 from .models import Contract
 from .tasks import process_contract_task
+
 
 class DocumentUploadView(View):
     template_name = "documents/index.html"

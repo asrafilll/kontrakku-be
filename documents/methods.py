@@ -1,37 +1,39 @@
+from langchain_experimental.text_splitter import SemanticChunker
+from langchain_openai.embeddings import OpenAIEmbeddings
+
 from core.ai.chroma import chroma, openai_ef
 from core.ai.mistral import mistral
 from core.ai.prompt_manager import PromptManager
+from core.methods import send_notification
 from documents.models import CONTRACT_DONE, Contract
-from langchain_experimental.text_splitter import SemanticChunker
-from langchain_openai.embeddings import OpenAIEmbeddings
-# from core.methods import send_notification
 
-# def get_chroma_data(contract_id, n_initial_words=10):
-#     try:
-#         collection = chroma.get_collection(
-#             name=contract_id,
-#             embedding_function=openai_ef
-#         )
 
-#         all_chunks = collection.get(include=["documents"])["documents"]
+def get_chroma_data(contract_id, n_initial_words=10):
+    try:
+        collection = chroma.get_collection(
+            name=contract_id, embedding_function=openai_ef
+        )
 
-#         n_chunks = len(all_chunks)
-#         initial_snippets = []
-#         for chunk in all_chunks:
-#             words = chunk.split()
-#             snippet = " ".join(words[:n_initial_words])
-#             initial_snippets.append(snippet)
+        all_chunks = collection.get(include=["documents"])["documents"]
 
-#         print(f"Document was split into {n_chunks} chunks.\n")
-#         for i, text in enumerate(initial_snippets, start=1):
-#             print(f"Chunk {i} starts with: {text!r}")
+        n_chunks = len(all_chunks)
+        initial_snippets = []
+        for chunk in all_chunks:
+            words = chunk.split()
+            snippet = " ".join(words[:n_initial_words])
+            initial_snippets.append(snippet)
 
-#     except Exception as e:
-#         print(f"Error inspecting chunks: {e}")
-#         return 0, []
+        print(f"Document was split into {n_chunks} chunks.\n")
+        for i, text in enumerate(initial_snippets, start=1):
+            print(f"Chunk {i} starts with: {text!r}")
+
+    except Exception as e:
+        print(f"Error inspecting chunks: {e}")
+        return 0, []
+
 
 def process_contract(contract_id):
-    # send_notification("notification", "Document processing started")
+    send_notification("notification", "Document processing started")
     contract = Contract.objects.get(id=contract_id)
     file_name = contract.file_path.name
 
@@ -77,7 +79,7 @@ def process_contract(contract_id):
         • [First bullet in that language]  
         • [Second bullet…]  
         </result>
-        """
+        """,
     )
     pm.add_message("user", f"contract: {content}")
 
@@ -91,15 +93,14 @@ def process_contract(contract_id):
     splitter = SemanticChunker(OpenAIEmbeddings())
     documents = splitter.create_documents([content])
 
-    collection = chroma.create_collection(name=contract.id, embedding_function=openai_ef)
+    collection = chroma.create_collection(
+        name=contract.id, embedding_function=openai_ef
+    )
 
     chunk_docs = [doc.model_dump().get("page_content") for doc in documents]
     chunk_ids = [str(i) for i in range(len(documents))]
 
-    collection.add(
-        documents=chunk_docs,
-        ids=chunk_ids
-    )
+    collection.add(documents=chunk_docs, ids=chunk_ids)
 
     result_summary = {
         "contract_id": contract.id,
@@ -107,7 +108,7 @@ def process_contract(contract_id):
         "content_length": len(content),
         "summary_length": len(summarized_content),
         "chunks_created": len(documents),
-        "status": contract.status
+        "status": contract.status,
     }
 
     return result_summary
