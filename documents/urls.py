@@ -6,7 +6,9 @@ from .views import DocumentUploadView
 urlpatterns = [
     path("documents/", DocumentUploadView.as_view(), name="documents"),
     path(
-        "api/v1/contracts/upload", ContractUploadAPI.as_view(), name="api_upload_contract"
+        "api/v1/contracts/upload",
+        ContractUploadAPI.as_view(),
+        name="api_upload_contract",
     ),
     path(
         "api/v1/contracts",

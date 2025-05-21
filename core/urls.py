@@ -6,6 +6,7 @@ from .consumer import ChatConsumer, NotificationConsumer
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("documents.urls")),
+    path("", include("chats.urls")),
 ]
 
 websocket_urlpatterns = [
