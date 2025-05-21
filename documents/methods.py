@@ -33,7 +33,7 @@ def get_chroma_data(contract_id, n_initial_words=10):
 
 
 def process_contract(contract_id):
-    send_notification("notification", "Document processing started")
+    send_notification("notification", "Processing the contract..")
     contract = Contract.objects.get(id=contract_id)
     file_name = contract.file_path.name
 
@@ -45,6 +45,7 @@ def process_contract(contract_id):
         purpose="ocr",
     )
 
+    send_notification("notification", "Reading the contract..")
     signed_url = mistral.files.get_signed_url(file_id=uploaded_pdf.id)
 
     ocr_response = mistral.ocr.process(
@@ -57,25 +58,45 @@ def process_contract(contract_id):
     for page in ocr_response.dict().get("pages", []):
         content += page["markdown"]
 
+    send_notification("notification", "Understanding the contract..")
+
     pm = PromptManager()
     pm.add_message(
         "system",
         """
-        You are a contract summarization assistant.  Your job is:
+        You are a contract-summarization assistant. Your job is:
 
         <thinking>
         0. Look at the raw contract text and decide whether it is written in English or in Bahasa Indonesia.  
            — If it’s English, set CONTRACT_LANGUAGE = "English".  
-           — If it’s Bahasa Indonesia, set CONTRACT_LANGUAGE = "Bahasa Indonesia".  
-        1. Carefully review the contract document in that detected language.  
-        2. Identify the main purpose, parties involved, and key terms and conditions.  
-        3. Determine the appropriate level of detail based on {$SUMMARY_DETAIL_LEVEL}.  
-        4. Organize your summary into clear bullet points.  
-        5. Make sure your output is in the same language you detected—no switching!  
+           — If it’s Bahasa Indonesia, set CONTRACT_LANGUAGE = "Bahasa Indonesia".
+        
+        1. Carefully review the contract document in that detected language.
+        
+        2. Identify the main purpose, parties involved, and key terms and conditions.
+        
+        3. Extract and list these critical employment-contract elements.  
+           Mark any that are absent with “❌ missing”:
+        
+           • **Company details** – name, address, line of business  
+           • **Employee details** – name, gender, age, address  
+           • **Job details** – position / role, work location  
+           • **Compensation** – wage amount and payment method  
+           • **Rights & obligations** of employer and employee per law / company regulations / collective agreement  
+           • **Contract type** – PKWT (Perjanjian Kerja Waktu Tertentu, fixed-term) or PKWTT (Perjanjian Kerja Waktu Tidak Tertentu, permanent)  
+           • **Validity of the contract** – start date, duration (for PKWT), place & date signed, signatures of both parties  
+           • **Probation** – allowed *only* for PKWTT and max 3 months; must be absent for PKWT
+        
+        4. Flag any clauses or penalties that could disadvantage the employee, including diploma / certificate retention or other onerous fines.
+        
+        5. Determine the appropriate level of detail based on {$SUMMARY_DETAIL_LEVEL}.
+        
+        6. Organize your summary into clear bullet points.
+        
+        7. Make sure your output is in the same language you detected—no switching!
         </thinking>
-
-        <result>       
-        CONTRACT_LANGUAGE: {the language you detected}  
+        
+        <result>
         • [First bullet in that language]  
         • [Second bullet…]  
         </result>
@@ -110,5 +131,7 @@ def process_contract(contract_id):
         "chunks_created": len(documents),
         "status": contract.status,
     }
+
+    send_notification("notification", f"Analysis of contract {file_name} has been done")
 
     return result_summary
