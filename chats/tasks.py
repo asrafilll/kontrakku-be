@@ -9,6 +9,7 @@ from core.ai.prompt_manager import PromptManager
 from core.methods import send_chat_message
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain.embeddings import OpenAIEmbeddings 
+from documents.preparation import ensure_uu_reference_collection
 
 SYSTEM_PROMPT_RAG = """
 You are a helpful assistant,
@@ -83,16 +84,23 @@ def process_chat(message, contract_id):
     collection = chroma.get_collection(contract_id, embedding_function=openai_ef)
 
      # Cek apakah UU sudah terindex
-    already_indexed = collection.get(ids=["uu13-2003-0"])
-    if not already_indexed["ids"]:
-        documents = extract_uud()
-        collection.add(
-            documents=[doc.page_content for doc in documents],
-            metadatas=[{"source": "UU_13_2003", "index": i} for i in range(len(documents))],
-            ids=[f"uu13-2003-{i}" for i in range(len(documents))]
-        )
+    # already_indexed = collection.get(ids=["uu13-2003-0"])
+    # if not already_indexed["ids"]:
+    #     documents = extract_uud()
+    #     collection.add(
+    #         documents=[doc.page_content for doc in documents],
+    #         metadatas=[{"source": "UU_13_2003", "index": i} for i in range(len(documents))],
+    #         ids=[f"uu13-2003-{i}" for i in range(len(documents))]
+    #     )
+    uu_collection = ensure_uu_reference_collection()
 
-    res = collection.query(query_texts=[message], n_results=3)
+    doc_results = collection.query(query_texts=[message], n_results=3)
+
+    uu_results = uu_collection.query(query_texts=[message], n_results=2)
+
+    combined_results = doc_results["documents"] + uu_results["documents"]
+
+    # res = collection.query(query_texts=[message], n_results=3)
 
     messages = []
     chats = Chat.objects.filter(contract_id=contract_id).order_by("created_at")[
@@ -102,7 +110,7 @@ def process_chat(message, contract_id):
     for chat in chats:
         messages.append({"role": chat.role, "message": chat.message})
 
-    system_prompt = SYSTEM_PROMPT_3.format(document=json.dumps(res))
+    system_prompt = SYSTEM_PROMPT_3.format(document=json.dumps(combined_results))
 
     pm = PromptManager()
     pm.add_message("system", system_prompt)
