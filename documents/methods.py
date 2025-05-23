@@ -1,18 +1,14 @@
 import json
 import re
-from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
 
 from django.utils import timezone
-from langchain_experimental.text_splitter import SemanticChunker
-from langchain_openai.embeddings import OpenAIEmbeddings
 
-from core.ai.chroma import chroma, openai_ef
 from core.ai.mistral import mistral
 from core.ai.prompt_manager import PromptManager
-from core.methods import send_notification
+from core.methods import send_notification, send_chat_message
 from documents.models import CONTRACT_DONE, Contract
 
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
@@ -21,6 +17,140 @@ IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 def remove_images_from_md(md: str) -> str:
     cleaned = IMAGE_RE.sub("", md)
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+
+class SplitResult(BaseModel):
+    clauses: list[str] = Field(
+        ..., description="A list of contract clauses, each as a string."
+    )
+
+
+class SubpointCoverageResult(BaseModel):
+    coverage: List[bool] = Field(
+        ..., description="Boolean flags indicating coverage for each sub-point in order."
+    )
+
+
+class ClauseAnalysisResult(BaseModel):
+    """Pydantic model for the combined analysis result of a single clause."""
+
+    topic_id: int | str = Field(
+        ...,
+        description="The ID of the category from CHECKLIST, or 'extra' if no match.",
+    )
+    summary: str = Field(
+        ...,
+        description="A simple explanation/summary of the contract clause in <=120 words.",
+    )
+    vague: bool = Field(..., description="True if the clause is vague.")
+    red_flag: bool = Field(
+        ..., description="True if the clause contains a red flag/risk."
+    )
+    risk_reason: str = Field(
+        ...,
+        description="A concise reason (<=40 words) why the clause is vague or a red flag, if applicable.",
+    )
+    questions_for_company: List[str] = Field(
+        ...,
+        description="A list of specific questions to ask the company regarding this clause, if needed.",
+    )
+
+
+def check_subpoints(clause_md: str, bullets: List[str]) -> List[bool]:
+    """
+    Determines which sub-points are clearly covered in the clause
+    by asking the LLM to return a JSON object with a `coverage` list.
+    """
+    pm = PromptManager()
+    pm.add_message(
+        "system",
+        (
+            "Tentukan apakah pasal berikut *jelas* mencakup tiap sub-poin.\n"
+            "Balas dengan JSON berisi field `coverage`, berupa array boolean\n"
+            "sesuai urutan sub-poin. Contoh:\n"
+            '{"coverage": [true, false, true]}\n'
+            "Pastikan JSON valid."
+        ),
+    )
+    pm.add_message(
+        "user",
+        json.dumps(
+            {"clause_markdown": clause_md, "subpoints": bullets}, ensure_ascii=False
+        ),
+    )
+
+    try:
+        raw: Union[dict, str] = pm.generate_structured(SubpointCoverageResult)
+
+        # parse into our Pydantic model
+        if isinstance(raw, str):
+            result = SubpointCoverageResult.model_validate_json(raw)
+        else:
+            result = SubpointCoverageResult.model_validate(raw)
+
+        # pad/trim to match number of bullets
+        cov = result.coverage
+        return [cov[i] if i < len(cov) else False for i in range(len(bullets))]
+
+    except (ValidationError, json.JSONDecodeError, Exception) as e:
+        print(f"Error checking subpoints with LLM: {e}")
+        return [False] * len(bullets)
+
+
+def process_single_clause_with_llm(clause_md: str) -> ClauseAnalysisResult:
+    """
+    Performs a combined analysis of a single contract clause using one LLM call.
+    This includes topic categorization, summarization, risk detection, and question generation.
+    """
+    pm = PromptManager()
+    topic_list_str = "\n    ".join(f"{i}. {v['title']}" for i, v in CHECKLIST.items())
+    pm.add_message(
+        "system",
+        (
+            "Anda adalah asisten analisis kontrak yang cerdas dan efisien. "
+            "Untuk setiap klausa yang diberikan, Anda harus melakukan analisis lengkap dalam satu respons JSON. "
+            "Ikuti instruksi di bawah ini dengan cermat dan berikan output dalam format JSON yang telah ditentukan.\n\n"
+            "**Instruksi Analisis Klausa:**\n"
+            "1.  **Kategorisasi Topik**: Klasifikasikan klausa ke salah satu topik berikut. Jika tidak ada yang cocok, gunakan 'extra'.\n"
+            f"    {topic_list_str}\n"
+            "2.  **Ringkasan Sederhana**: Ringkas klausa dalam Bahasa Indonesia menjadi maksimal 120 kata.\n"
+            "3.  **Deteksi Risiko**: Identifikasi apakah klausa tersebut 'vague' (ambigu) atau 'red_flag' (berisiko tinggi). Berikan alasan singkat (maksimal 40 kata) jika ya. Jika tidak ada risiko, biarkan alasan kosong.\n"
+            "4.  **Pertanyaan untuk Perusahaan**: Buat daftar pertanyaan spesifik yang perlu diajukan kepada perusahaan terkait klausa ini untuk klarifikasi atau mitigasi risiko. Jika tidak ada pertanyaan, berikan daftar kosong.\n\n"
+            "**Format Output JSON yang Diinginkan:**\n"
+            "```json\n"
+            "{\n"
+            '  "topic_id": <int | "extra">, \n'
+            '  "summary": "<ringkasan klausa>",\n'
+            '  "vague": <true | false>,\n'
+            '  "red_flag": <true | false>,\n'
+            '  "risk_reason": "<alasan jika vague/red_flag, maks 40 kata>",\n'
+            '  "questions_for_company": ["<pertanyaan 1>", "<pertanyaan 2>"]\n'
+            "}\n"
+            "```\n"
+            "Pastikan Anda selalu menghasilkan JSON yang valid dan lengkap sesuai skema yang diminta."
+        ),
+    )
+    pm.add_message("user", clause_md)
+
+    try:
+        raw = pm.generate_structured(ClauseAnalysisResult)
+        if isinstance(raw, str):
+            return ClauseAnalysisResult.model_validate_json(raw)
+        else:
+            return ClauseAnalysisResult.model_validate(raw)
+    except Exception as e:
+        print(f"Error processing clause with LLM: {e}")
+        # Return a default/empty result on error
+        return ClauseAnalysisResult(
+            topic_id="extra",
+            summary="Tidak dapat menganalisis klausa ini karena kesalahan LLM.",
+            vague=False,
+            red_flag=False,
+            risk_reason=f"Error: {e}",
+            questions_for_company=[
+                "Ada masalah saat menganalisis klausa ini. Perlu ditinjau manual."
+            ],
+        )
 
 
 CHECKLIST: Dict[int, Dict[str, Any]] = {
@@ -147,78 +277,12 @@ CHECKLIST: Dict[int, Dict[str, Any]] = {
 
 TITLE_MAP = {v["title"].lower(): k for k, v in CHECKLIST.items()}
 
-
-class SplitResult(BaseModel):
-    clauses: list[str]
-
-
-def detect_title(clause_md: str) -> int | str:
-    pm = PromptManager()
-    pm.add_message(
-        "system",
-        "Klasifikasikan pasal berikut ke salah satu dari 12 topik. "
-        'Berikan jawaban dalam format satu barus JSON: {"id": <1-12 atau "extra">}.\n'
-        + "\n".join(f"{i}. {v['title']}" for i, v in CHECKLIST.items()),
-    )
-    pm.add_message("user", clause_md)
-    try:
-        return int(json.loads(pm.generate())["id"])
-    except Exception:
-        return "extra"
-
-
-def check_subpoints(clause_md: str, bullets: List[str]) -> List[bool]:
-    pm = PromptManager()
-    pm.add_message(
-        "system",
-        "Tentukan apakah pasal berikut *jelas* mencakup tiap sub-poin. "
-        "Berikan jawaban berupa JSON array boolean sesuai urutan sub-poin.",
-    )
-    pm.add_message(
-        "user",
-        json.dumps(
-            {"clause_markdown": clause_md, "subpoints": bullets}, ensure_ascii=False
-        ),
-    )
-    try:
-        res = json.loads(pm.generate())
-        return [(res[i] if i < len(res) else False) for i in range(len(bullets))]
-    except Exception:
-        return [False] * len(bullets)
-
-
-def scan_risk(clause_md: str) -> Dict[str, Any]:
-    pm = PromptManager()
-    pm.add_message(
-        "system",
-        "Deteksi risiko yang terdapat pada klausa. Balas JSON: {vague: bool, red_flag: bool, reason: str≤40}",
-    )
-    pm.add_message("user", clause_md)
-    try:
-        return json.loads(pm.generate())
-    except Exception:
-        return {"vague": False, "red_flag": False, "reason": ""}
-
-
-def summarise_clause(clause_md: str) -> str:
-    pm = PromptManager()
-    pm.add_message(
-        "system",
-        "Ringkas pasal kontrak berikut dalam ≤120 kata dalam Bahasa Indonesia.",
-    )
-    pm.add_message("user", clause_md)
-    summary = pm.generate()
-    return (summary or "").strip()
-
-
 def process_contract(contract_id):
     contract = Contract.objects.get(id=contract_id)
     file_name = contract.file_path.name
 
-    # 1. OCR with Mistral
-    send_notification("notification", "Processing the contract..")
-    print(f"Processing contract ID: {contract.id}")
-    # process_contract(contract.id)
+    # 1. OCR upload & processing
+    send_notification(notification_type="Document Processing", content=f"{file_name} - Memproses dokumen")
     uploaded_pdf = mistral.files.upload(
         file={
             "file_name": file_name,
@@ -226,95 +290,115 @@ def process_contract(contract_id):
         },
         purpose="ocr",
     )
-
     signed_url = mistral.files.get_signed_url(file_id=uploaded_pdf.id)
-
     ocr_response = mistral.ocr.process(
         model="mistral-ocr-latest",
         document={"type": "document_url", "document_url": signed_url.url},
         include_image_base64=False,
     )
+    print("Done OCR")
 
-    # 2. Form a Markdown file
+    # 2. Compose Markdown
     content = ""
-    for page in ocr_response.dict().get("pages", []):
-        content += page["markdown"]
+    for page in ocr_response.model_dump().get("pages", []):
+        content += page.get("markdown", "")
     content = remove_images_from_md(content)
 
-    # 3. Split markdown into specific topics
-    send_notification("notification", "Understanding the contract..")
-    print(f"Understanding the contract ID: {contract.id}")
+    # 3. Split Markdown into clauses
+    send_notification(notification_type="Document Processing", content=f"{file_name} - Memecah dokumen per klausa")
     splitter = PromptManager()
     splitter.add_message(
         "system",
         (
-            "Bagi dokumen kontrak dengan format Markdown berikut menjadi format *JSON* untuk tiap pasal/logical clause. "
-            "Berikan jawaban persis satu baris array JSON; setiap elemen berisi satu pasal."
+            "Bagi dokumen kontrak dalam format Markdown menjadi JSON array klausa. "
+            "Setiap elemen adalah satu pasal/klausa sebagai string."
         ),
     )
     splitter.add_message("user", content)
     split_result = splitter.generate_structured(SplitResult)
     clauses: list[str] = split_result.get("clauses", [])
     print("Number of split:", len(clauses))
+    for clause in clauses:
+        print(clause[:20])
+    print()
 
-    # 4) Analysis loops
+    send_notification(notification_type="Document Processing", content="Document splitted as:")
+    send_notification(notification_type="Document Processing", content=f"{clauses}")
+
+    # 4. Analyze each clause
+    send_notification(notification_type="Document Processing", content=f"{file_name} - Menganalisa dokumen per klausa")
     coverage_titles = {i: False for i in CHECKLIST}
-    coverage_bullets = {i: [False] * len(v["bullets"]) for i, v in CHECKLIST.items()}
-    extra_clauses, issues, summaries = [], [], []
+    summaries: list[str] = []
+    report_clauses: list[dict] = []
 
     for idx, clause_md in enumerate(clauses, 1):
-        print(f"Analyzing clause #{idx}")
-        send_notification("notification", f"Analysing clause {idx}/{len(clauses)}…")
+        send_notification(notification_type="Document Processing",
+                          content=f"{file_name} - Memeriksa klausa - {idx}")
+        print(f"\n\nAnalyzing clause #{idx}")
+        analysis = process_single_clause_with_llm(clause_md)
 
-        topic_id = detect_title(clause_md)
-        if isinstance(topic_id, int):
-            coverage_titles[topic_id] = True
-            bullet_hits = check_subpoints(clause_md, CHECKLIST[topic_id]["bullets"])
-            coverage_bullets[topic_id] = [
-                prev or hit
-                for prev, hit in zip(coverage_bullets[topic_id], bullet_hits)
-            ]
+        # # track covered topics
+        # tid = analysis.topic_id
+        # if isinstance(tid, int) and tid in CHECKLIST:
+        #     coverage_titles[tid] = True
+
+        # resolve the topic name -----------------------------▼
+        if isinstance(analysis.topic_id, int) and analysis.topic_id in CHECKLIST:
+            topic_name = CHECKLIST[analysis.topic_id]["title"]
+            coverage_titles[analysis.topic_id] = True  # keep coverage logic
         else:
-            extra_clauses.append(idx)
+            topic_name = "extra"
 
-        risk = scan_risk(clause_md)
-        if risk["vague"] or risk["red_flag"]:
-            issues.append({"clause": idx, **risk})
+        # collect summary
+        summaries.append(analysis.summary)
 
-        summaried_clause = summarise_clause(clause_md)
-        print(summaried_clause)
-        summaries.append(summaried_clause)
+        # build clause entry
+        report_clauses.append({
+            # "clauseTopic": analysis.topic_id,
+            "clauseTopic": topic_name,
+            "clauseContent": clause_md,
+            "clauseSummary": analysis.summary,
+            "vague": analysis.vague,
+            "redFlag": analysis.red_flag,
+            "issueReason": analysis.risk_reason,
+            "questions": analysis.questions_for_company,
+        })
 
-    # 5) Compile report
-    missing_titles = [
-        CHECKLIST[i]["title"] for i, ok in coverage_titles.items() if not ok
-    ]
-    missing_bullets: Dict[str, List[str]] = {}
-    for i, hits in coverage_bullets.items():
-        miss = [bp for bp, ok in zip(CHECKLIST[i]["bullets"], hits) if not ok]
-        if miss:
-            missing_bullets[CHECKLIST[i]["title"]] = miss
+    # 5. Contract-level summary
+    send_notification(notification_type="Document Processing", content=f"{file_name} - Meringkas isi dari kontrak")
+    pm_summary = PromptManager()
+    pm_summary.add_message(
+        "system",
+        "Dari ringkasan pasal di atas, buat ringkasan keseluruhan kontrak dalam Bahasa Indonesia."
+    )
+    pm_summary.add_message("user", "\n\n".join(summaries))
+    contract_summary = pm_summary.generate()
 
-    contract.status = CONTRACT_DONE
-    contract.updated_at = timezone.now()
-    contract.raw_text = content
-    contract.summarized_text = summaries
-    contract.save()
+    # 6. Build simplified report
+    covered = [CHECKLIST[i]["title"] for i, ok in coverage_titles.items() if ok]
+    uncovered = [CHECKLIST[i]["title"] for i, ok in coverage_titles.items() if not ok]
 
     report = {
-        "contract_id": str(contract.id),
-        "file_name": file_name,
-        "present_titles": [
-            CHECKLIST[i]["title"] for i, ok in coverage_titles.items() if ok
-        ],
-        "missing_titles": missing_titles,
-        "missing_bullets": missing_bullets,
-        "extra_clauses": extra_clauses,
-        "issues": issues,
-        "summaries": summaries,
+        "fileName": file_name,
+        "contractSummary": contract_summary,
+        "coveredTopic": covered,
+        "uncoveredTopic": uncovered,
+        "clauses": report_clauses,
     }
 
-    send_notification("notification", f"Analysis of contract {file_name} has been done")
-    print(f"Analysis of contract {file_name} has been done")
-    print(report)
-    return report
+    # validate json
+    json_report = json.dumps(report, ensure_ascii=False, indent=2, default=str)
+
+    contract.raw_text = content
+    contract.summarized_text = json_report
+    contract.status = CONTRACT_DONE
+    contract.updated_at = timezone.now()
+    contract.save()
+
+    send_notification(notification_type="Document Processing", content=f"{file_name} - Pemrosesan selesai")
+    send_chat_message(message=json_report, contract_id=contract.id)
+
+    compact_report = json.dumps(report,ensure_ascii=False,separators=(",", ":"),default=str)
+    return compact_report
+
+
