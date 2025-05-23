@@ -2,7 +2,6 @@ import re
 
 from core.ai.chroma import chroma, openai_ef
 
-# Regex patterns (assuming they are defined as in previous valid code)
 BAB_ROMAN_PATTERN = re.compile(r"^#\s*BAB\s+([IVXLCDM]+)", re.IGNORECASE)
 BAB_TITLE_PATTERN = re.compile(r"^##\s*(.+)", re.IGNORECASE)
 PASAL_PATTERN = re.compile(r"^###\s*Pasal\s+(\d+)", re.IGNORECASE)
@@ -266,18 +265,26 @@ def ensure_uu_reference_collection(
     if force_recreate:
         print(f"Force recreating collection '{collection_name}'...")
         build_uu_reference_vector_collection(file_path, collection_name)
+
+        collection = chroma.get_collection(
+            name=collection_name, embedding_function=openai_ef
+        )
+        return collection
     else:
         try:
-            # Try to get the collection without creating it
-            # collection = chroma.get_collection(name=collection_name) # Uncomment in real setup
-            # For demonstration without actual ChromaDB, let's simulate a collection not found initially
-            # or a successful retrieval if a mock collection was created by a previous call.
-            collection = chroma.get_collection(name=collection_name)
+            collection = chroma.get_collection(
+                name=collection_name, embedding_function=openai_ef
+            )
             print(
                 f"🎉 Collection '{collection_name}' found. It contains {collection.count()} items."
             )
+            return collection
         except Exception as e:
             print(
                 f"Collection '{collection_name}' not found or an error occurred: {e}. Building it now..."
             )
             build_uu_reference_vector_collection(file_path, collection_name)
+            collection = chroma.get_collection(
+                name=collection_name, embedding_function=openai_ef
+            )
+            return collection
