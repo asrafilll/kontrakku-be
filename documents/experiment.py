@@ -1,8 +1,7 @@
 from django.db.models import Q
 
-from .models import Contract
-
 from .methods import process_contract
+from .models import Contract
 
 
 def run_process_latest_contract():

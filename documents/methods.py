@@ -2,13 +2,12 @@ import json
 import re
 from typing import Any, Dict, List, Union
 
-from pydantic import BaseModel, Field, ValidationError
-
 from django.utils import timezone
+from pydantic import BaseModel, Field, ValidationError
 
 from core.ai.mistral import mistral
 from core.ai.prompt_manager import PromptManager
-from core.methods import send_notification, send_chat_message
+from core.methods import send_chat_message, send_notification
 from documents.models import CONTRACT_DONE, Contract
 
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
@@ -27,7 +26,8 @@ class SplitResult(BaseModel):
 
 class SubpointCoverageResult(BaseModel):
     coverage: List[bool] = Field(
-        ..., description="Boolean flags indicating coverage for each sub-point in order."
+        ...,
+        description="Boolean flags indicating coverage for each sub-point in order.",
     )
 
 
@@ -277,12 +277,15 @@ CHECKLIST: Dict[int, Dict[str, Any]] = {
 
 TITLE_MAP = {v["title"].lower(): k for k, v in CHECKLIST.items()}
 
+
 def process_contract(contract_id):
     contract = Contract.objects.get(id=contract_id)
     file_name = contract.file_path.name
 
     # 1. OCR upload & processing
-    send_notification(notification_type="Document Processing", content=f"Membaca dokumen")
+    send_notification(
+        notification_type="Document Processing", content=f"Membaca dokumen"
+    )
     uploaded_pdf = mistral.files.upload(
         file={
             "file_name": file_name,
@@ -305,7 +308,9 @@ def process_contract(contract_id):
     content = remove_images_from_md(content)
 
     # 3. Split Markdown into clauses
-    send_notification(notification_type="Document Processing", content=f"Memecah dokumen per klausa")
+    send_notification(
+        notification_type="Document Processing", content=f"Memecah dokumen per klausa"
+    )
     splitter = PromptManager()
     splitter.add_message(
         "system",
@@ -322,17 +327,25 @@ def process_contract(contract_id):
         print(clause[:20])
     print()
 
-    send_notification(notification_type="Document Processing", content=f"Dokumen dipecah sebanyak {len(clauses)} bagian")
+    send_notification(
+        notification_type="Document Processing",
+        content=f"Dokumen dipecah sebanyak {len(clauses)} bagian",
+    )
 
     # 4. Analyze each clause
-    send_notification(notification_type="Document Processing", content=f"Menganalisa dokumen per bagian")
+    send_notification(
+        notification_type="Document Processing",
+        content=f"Menganalisa dokumen per bagian",
+    )
     coverage_titles = {i: False for i in CHECKLIST}
     summaries: list[str] = []
     report_clauses: list[dict] = []
 
     for idx, clause_md in enumerate(clauses, 1):
-        send_notification(notification_type="Document Processing",
-                          content=f"Memeriksa bagian - {idx}/{len(clauses)}")
+        send_notification(
+            notification_type="Document Processing",
+            content=f"Memeriksa bagian - {idx}/{len(clauses)}",
+        )
         print(f"\n\nAnalyzing clause #{idx}")
         analysis = process_single_clause_with_llm(clause_md)
 
@@ -352,23 +365,27 @@ def process_contract(contract_id):
         summaries.append(analysis.summary)
 
         # build clause entry
-        report_clauses.append({
-            # "clauseTopic": analysis.topic_id,
-            "clauseTopic": topic_name,
-            "clauseContent": clause_md,
-            "clauseSummary": analysis.summary,
-            "vague": analysis.vague,
-            "redFlag": analysis.red_flag,
-            "issueReason": analysis.risk_reason,
-            "questions": analysis.questions_for_company,
-        })
+        report_clauses.append(
+            {
+                # "clauseTopic": analysis.topic_id,
+                "clauseTopic": topic_name,
+                "clauseContent": clause_md,
+                "clauseSummary": analysis.summary,
+                "vague": analysis.vague,
+                "redFlag": analysis.red_flag,
+                "issueReason": analysis.risk_reason,
+                "questions": analysis.questions_for_company,
+            }
+        )
 
     # 5. Contract-level summary
-    send_notification(notification_type="Document Processing", content=f"Meringkas isi dari kontrak")
+    send_notification(
+        notification_type="Document Processing", content=f"Meringkas isi dari kontrak"
+    )
     pm_summary = PromptManager()
     pm_summary.add_message(
         "system",
-        "Dari ringkasan pasal di atas, buat ringkasan keseluruhan kontrak dalam Bahasa Indonesia."
+        "Dari ringkasan pasal di atas, buat ringkasan keseluruhan kontrak dalam Bahasa Indonesia.",
     )
     pm_summary.add_message("user", "\n\n".join(summaries))
     contract_summary = pm_summary.generate()
@@ -394,9 +411,9 @@ def process_contract(contract_id):
     contract.updated_at = timezone.now()
     contract.save()
 
-    send_notification(notification_type="Document Processing", content=f"Pemrosesan selesai")
+    send_notification(
+        notification_type="Document Processing", content=f"Pemrosesan selesai"
+    )
     send_notification(notification_type="Processing Done", content=report)
 
     return report
-
-
