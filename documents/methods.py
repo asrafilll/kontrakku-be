@@ -282,7 +282,7 @@ def process_contract(contract_id):
     file_name = contract.file_path.name
 
     # 1. OCR upload & processing
-    send_notification(notification_type="Document Processing", content=f"{file_name} - Memproses dokumen")
+    send_notification(notification_type="Document Processing", content=f"Membaca dokumen")
     uploaded_pdf = mistral.files.upload(
         file={
             "file_name": file_name,
@@ -305,7 +305,7 @@ def process_contract(contract_id):
     content = remove_images_from_md(content)
 
     # 3. Split Markdown into clauses
-    send_notification(notification_type="Document Processing", content=f"{file_name} - Memecah dokumen per klausa")
+    send_notification(notification_type="Document Processing", content=f"Memecah dokumen per klausa")
     splitter = PromptManager()
     splitter.add_message(
         "system",
@@ -322,18 +322,17 @@ def process_contract(contract_id):
         print(clause[:20])
     print()
 
-    send_notification(notification_type="Document Processing", content="Document splitted as:")
-    send_notification(notification_type="Document Processing", content=f"{clauses}")
+    send_notification(notification_type="Document Processing", content=f"Dokumen dipecah sebanyak {len(clauses)} bagian")
 
     # 4. Analyze each clause
-    send_notification(notification_type="Document Processing", content=f"{file_name} - Menganalisa dokumen per klausa")
+    send_notification(notification_type="Document Processing", content=f"Menganalisa dokumen per bagian")
     coverage_titles = {i: False for i in CHECKLIST}
     summaries: list[str] = []
     report_clauses: list[dict] = []
 
     for idx, clause_md in enumerate(clauses, 1):
         send_notification(notification_type="Document Processing",
-                          content=f"{file_name} - Memeriksa klausa - {idx}")
+                          content=f"Memeriksa bagian - {idx}/{len(clauses)}")
         print(f"\n\nAnalyzing clause #{idx}")
         analysis = process_single_clause_with_llm(clause_md)
 
@@ -365,7 +364,7 @@ def process_contract(contract_id):
         })
 
     # 5. Contract-level summary
-    send_notification(notification_type="Document Processing", content=f"{file_name} - Meringkas isi dari kontrak")
+    send_notification(notification_type="Document Processing", content=f"Meringkas isi dari kontrak")
     pm_summary = PromptManager()
     pm_summary.add_message(
         "system",
@@ -387,18 +386,17 @@ def process_contract(contract_id):
     }
 
     # validate json
-    json_report = json.dumps(report, ensure_ascii=False, indent=2, default=str)
+    pretty_json = json.dumps(report, ensure_ascii=False, indent=2, default=str)
 
     contract.raw_text = content
-    contract.summarized_text = json_report
+    contract.summarized_text = pretty_json
     contract.status = CONTRACT_DONE
     contract.updated_at = timezone.now()
     contract.save()
 
-    send_notification(notification_type="Document Processing", content=f"{file_name} - Pemrosesan selesai")
-    send_chat_message(message=json_report, contract_id=contract.id)
+    send_notification(notification_type="Document Processing", content=f"Pemrosesan selesai")
+    send_notification(notification_type="Processing Done", content=report)
 
-    compact_report = json.dumps(report,ensure_ascii=False,separators=(",", ":"),default=str)
-    return compact_report
+    return report
 
 
