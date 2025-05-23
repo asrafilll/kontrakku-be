@@ -253,11 +253,26 @@ def build_uu_reference_vector_collection(
     print(f"✅ Collection '{collection_name}' created with {len(chunk_ids)} chunks.")
     print(f"Counted {collection.count()} chunks in the collection.")
 
-def ensure_uu_reference_collection(file_path: str = "uu_13_2003_gemini.md", collection_name: str = "uu_reference"):
-    try:
-        # Try to get the collection without creating it
-        collection = chroma.get_collection(name=collection_name)
-        print(f"Collection '{collection_name}' found. It contains {collection.count()} items.")
-    except Exception as e:
-        print(f"Collection '{collection_name}' not found or an error occurred: {e}. Building it now...")
+def ensure_uu_reference_collection(
+    file_path: str = "media/uu_13_2003_gemini.md",
+    collection_name: str = "uu_reference",
+    force_recreate: bool = False,
+):
+    """
+    Checks if the 'uu_reference' Chroma collection exists. If not, it builds it.
+    If force_recreate is True, it will rebuild the collection regardless of its existence.
+    """
+    if force_recreate:
+        print(f"Force recreating collection '{collection_name}'...")
         build_uu_reference_vector_collection(file_path, collection_name)
+    else:
+        try:
+            # Try to get the collection without creating it
+            # collection = chroma.get_collection(name=collection_name) # Uncomment in real setup
+            # For demonstration without actual ChromaDB, let's simulate a collection not found initially
+            # or a successful retrieval if a mock collection was created by a previous call.
+            collection = chroma.get_collection(name=collection_name)
+            print(f"🎉 Collection '{collection_name}' found. It contains {collection.count()} items.")
+        except Exception as e:
+            print(f"Collection '{collection_name}' not found or an error occurred: {e}. Building it now...")
+            build_uu_reference_vector_collection(file_path, collection_name)
