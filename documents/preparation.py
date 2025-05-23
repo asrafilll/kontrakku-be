@@ -254,7 +254,6 @@ def build_uu_reference_vector_collection(
     print(f"Counted {collection.count()} chunks in the collection.")
 
 
-
 def ensure_uu_reference_collection(
     file_path: str = "media/uu_13_2003_gemini.md",
     collection_name: str = "uu_reference",
@@ -268,11 +267,15 @@ def ensure_uu_reference_collection(
         print(f"Force recreating collection '{collection_name}'...")
         build_uu_reference_vector_collection(file_path, collection_name)
 
-        collection = chroma.get_collection(name=collection_name, embedding_function=openai_ef)
+        collection = chroma.get_collection(
+            name=collection_name, embedding_function=openai_ef
+        )
         return collection
     else:
         try:
-            collection = chroma.get_collection(name=collection_name, embedding_function=openai_ef)
+            collection = chroma.get_collection(
+                name=collection_name, embedding_function=openai_ef
+            )
             print(
                 f"🎉 Collection '{collection_name}' found. It contains {collection.count()} items."
             )
@@ -282,5 +285,7 @@ def ensure_uu_reference_collection(
                 f"Collection '{collection_name}' not found or an error occurred: {e}. Building it now..."
             )
             build_uu_reference_vector_collection(file_path, collection_name)
-            collection = chroma.get_collection(name=collection_name, embedding_function=openai_ef)
+            collection = chroma.get_collection(
+                name=collection_name, embedding_function=openai_ef
+            )
             return collection
