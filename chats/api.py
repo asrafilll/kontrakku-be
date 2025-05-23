@@ -5,8 +5,9 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import Chat
 from documents.models import Contract
+
+from .models import Chat
 
 
 @method_decorator(csrf_exempt, name="dispatch")
