@@ -6,12 +6,15 @@ from openai import OpenAI
 
 load_dotenv()
 
-API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=API_KEY)
+API_KEY = os.getenv("GEMINI_API_KEY")
+client = OpenAI(
+    api_key=API_KEY,
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",  # for Gemini
+)
 
 
 class PromptManager:
-    def __init__(self, messages=[], model="gpt-4.1-mini-2025-04-14"):
+    def __init__(self, messages=[], model="gemini-2.5-flash-preview-05-20"):
         self.messages = messages
         self.model = model
 
@@ -26,13 +29,18 @@ class PromptManager:
 
     def generate(self):
         response = client.chat.completions.create(
-            model=self.model, messages=self.messages
+            model=self.model,
+            messages=self.messages,
+            reasoning_effort="medium",
         )
         return response.choices[0].message.content
 
     def generate_structured(self, schema):
         response = client.beta.chat.completions.parse(
-            model=self.model, messages=self.messages, response_format=schema
+            model=self.model,
+            messages=self.messages,
+            reasoning_effort="medium",
+            response_format=schema,
         )
 
         result = response.choices[0].message.model_dump()

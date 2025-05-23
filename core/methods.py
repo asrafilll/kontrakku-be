@@ -8,7 +8,7 @@ def send_notification(notification_type, content):
         "notification",
         {
             "type": "send_notification",
-            "message": {"content": content, "type": notification_type},
+            "message": {"type": notification_type, "content": content},
         },
     )
 

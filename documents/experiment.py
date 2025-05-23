@@ -18,3 +18,7 @@ def run_process_latest_contract():
 
     print(f"Processing contract ID: {contract.id}")
     process_contract(contract.id)
+
+
+# from documents.methods import process_contract
+# process_contract("970ace92-9513-425f-866b-3f8d8fb3597e")
