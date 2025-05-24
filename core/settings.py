@@ -111,26 +111,8 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # CORS settings
-# For development, you can set CORS_ALLOW_ALL=True in your .env file
-CORS_ALLOW_ALL_ORIGINS = os.environ.get("CORS_ALLOW_ALL", "False").lower() == "true"
-
-# For production, specify allowed origins
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",    # React dev server
-    "http://127.0.0.1:3000",    # React dev server alternative
-    "http://localhost:5173",    # Vite dev server
-    "http://127.0.0.1:5173",    # Vite dev server alternative
-    "http://localhost:8080",    # Vue dev server
-    "http://127.0.0.1:8080",    # Vue dev server alternative
-    # Add your production frontend URLs here
-    # "https://yourdomain.com",
-    # "https://www.yourdomain.com",
-]
-
-# Add environment variable for additional allowed origins
-additional_origins = os.environ.get("CORS_ADDITIONAL_ORIGINS", "")
-if additional_origins:
-    CORS_ALLOWED_ORIGINS.extend([origin.strip() for origin in additional_origins.split(",")])
+# Allow all origins for all environments (development and production)
+CORS_ALLOW_ALL_ORIGINS = True
 
 # Allow credentials (cookies, authorization headers)
 CORS_ALLOW_CREDENTIALS = True
