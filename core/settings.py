@@ -16,9 +16,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-v%y=8^7_j9g_glh(s9eo8_jzy40#ai!b9@=h85(z^q*51*h#$r"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 
 # Application definition
@@ -111,15 +111,42 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = True  # For development only
-# For production:
-# CORS_ALLOWED_ORIGINS = [
-#     "http://127.0.0.1:5500",
-#     "http://localhost:3000",
-# ]
+# For development, you can set CORS_ALLOW_ALL=True in your .env file
+CORS_ALLOW_ALL_ORIGINS = os.environ.get("CORS_ALLOW_ALL", "False").lower() == "true"
+
+# For production, specify allowed origins
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",    # React dev server
+    "http://127.0.0.1:3000",    # React dev server alternative
+    "http://localhost:5173",    # Vite dev server
+    "http://127.0.0.1:5173",    # Vite dev server alternative
+    "http://localhost:8080",    # Vue dev server
+    "http://127.0.0.1:8080",    # Vue dev server alternative
+    # Add your production frontend URLs here
+    # "https://yourdomain.com",
+    # "https://www.yourdomain.com",
+]
+
+# Add environment variable for additional allowed origins
+additional_origins = os.environ.get("CORS_ADDITIONAL_ORIGINS", "")
+if additional_origins:
+    CORS_ALLOWED_ORIGINS.extend([origin.strip() for origin in additional_origins.split(",")])
 
 # Allow credentials (cookies, authorization headers)
 CORS_ALLOW_CREDENTIALS = True
+
+# Allowed headers for CORS requests
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
