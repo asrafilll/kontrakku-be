@@ -1,4 +1,5 @@
 import os
+import json
 
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
@@ -47,7 +48,10 @@ class ContractStatusAPI(View):
             }
 
             if contract.status == "DONE":
-                response["summary"] = contract.summarized_text
+                try:
+                    response["summary"] = json.loads(contract.summarized_text)
+                except json.JSONDecodeError:
+                    response["summary"] = {"error": "Invalid JSON in summarized_text"}
 
             return JsonResponse(response)
 
